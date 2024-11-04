@@ -1,0 +1,20 @@
+name: spaceexpress
+channels:
+  - defaults
+  - conda-forge
+  - r
+dependencies:
+  - python=3.11
+  - scikit-learn>=1.5.0
+  - pandas>=2.2.2
+  - matplotlib>=3.8.4
+  - jupyter>=1.0.0
+  - scanpy>=1.10.1
+  - python-igraph>=0.11.5
+  - rpy2>=3.5.11
+  - r-lmtest>=0.9_40
+  - r-fitdistrplus>=1.1_11
+  - r-dplyr>=1.1.4
+  - pip
+  - pip:
+      - torch>=2.1.0
