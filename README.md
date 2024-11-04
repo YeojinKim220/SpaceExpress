@@ -8,7 +8,7 @@ SpaceExpress
 
 ## Getting started
 See [Tutorials](./docs/source/notebook/).
-For training one sample, check Tutorial 1. 
+For training one sample, check [Tutorial 1](./docs/source/notebook/Tutorial_1.ipynb). 
 
 ## Software dependencies
 Check requirement
