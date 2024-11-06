@@ -5,7 +5,6 @@ from sklearn.neighbors import kneighbors_graph
 import pickle
 import matplotlib.pyplot as plt
 import os 
-from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 def make_complete_graph(pos, k):
     """
@@ -78,8 +77,8 @@ def choose_k (adata_list):
                 recommended_k = i
             if G.is_connected():
                 print(f'Construct the k-nearest neighborhood graph using k = {i}...')
+                k = max(k, recommended_k)
                 break
-        k = max(k, recommended_k)
         if k == 20:
             print(f'Graph is disconnected. Recommended k = {recommended_k}...')
     print(f'Choose k = {k} for all datasets...')
@@ -212,7 +211,6 @@ def jaccard_similarity(adata, k=10):
     jaccard_index = len(intersection_edges) / len(union_edges) if len(union_edges) > 0 else 0
 
     return round(jaccard_index, 4)
-
 from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
@@ -223,6 +221,7 @@ import pandas as pd
 from pygam import LinearGAM, s
 import matplotlib.pyplot as plt    
 from sklearn.neighbors import kneighbors_graph
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 def gam (X, y):
     gam = LinearGAM(s(0, n_splines = 15))
@@ -233,32 +232,22 @@ def gam (X, y):
     y_pred = gam.predict(X_pred)
     return X_pred, y_pred
 
-def preprocess(exp_1, exp_2):
-    exp = np.concatenate([exp_1, exp_2])
-    mean_val = np.mean(exp)
-    std_val = np.std(exp)
-
-    rm_idx_1 = np.where(exp_1 >= mean_val + 4 * std_val)[0]
-    rm_idx_2 = np.where(exp_2 >= mean_val + 4 * std_val)[0]
-
-    if rm_idx_1.size != 0:
-        exp_1 = np.delete(exp_1, rm_idx_1, axis=0)
-    if rm_idx_2.size != 0:
-        exp_2 = np.delete(exp_2, rm_idx_2, axis=0)   
-    std_val_1 = np.std(exp_1)
-    std_val_2 = np.std(exp_2)
-
-    if std_val_1 != 0:  # Avoid division by zero
-        exp_1 = exp_1 / std_val_1
-    else:
-        print('std == 0')
-        
-    if std_val_2 != 0:  # Avoid division by zero
-        exp_2 = exp_2 / std_val_2
-    else:
-        print('std == 0')        
-        
-    return exp_1, exp_2, rm_idx_1, rm_idx_2 
+def preprocess (exp):
+    exp_concat = np.concatenate(exp)
+    mean_val = np.mean(exp_concat)
+    std_val = np.std(exp_concat)
+    
+    rm_idx = [np.where(exp[i] >= mean_val + 4 * std_val)[0] for i in range(len(exp))]
+    
+    for i in range(len(exp)):
+        if rm_idx[i].size != 0:
+            exp[i] = np.delete(exp[i], rm_idx[i], axis=0)
+        std_val = np.std(exp[i])
+        if std_val != 0:
+            exp[i] = exp[i] / std_val
+        else:
+            print('std == 0')   
+    return exp, rm_idx
 
 def plot_scatter(fig, ax, loc, color, cmap, title, stream=False, vmin = None, vmax = None, invert = False, color_bar =True):
     plt.rc('font', size=20)
@@ -273,9 +262,6 @@ def plot_scatter(fig, ax, loc, color, cmap, title, stream=False, vmin = None, vm
     ax.set_title(title)
     ax.set_xticks([])    
     ax.set_yticks([])
-    
-    ax.set_xticks([])    
-    ax.set_yticks([])    
     
     if color_bar == True:
         fig.colorbar(scatter, ax=ax)
@@ -292,66 +278,81 @@ def get_range(data, mode):
         q3 = np.max(data)    
 
     return (q1, q3)  
-        
-def rm_idx (data, idx):
-    for i in range(len(data)):
-        data[i] = np.delete(data[i], idx, axis=0)
-    return data
+  
+      
+def rm_idx (data_list, idx_list):
+    for i in range(len(data_list)):
+        for j in range(len(idx_list)):
+            data_list[i][j] = np.delete(data_list[i][j], idx_list[j], axis=0)
+    return data_list
 
-def plot_DSE (adata_list, df_fdr, file_list, gene_name, dimension):
+def plot_DSE (adata_list, df_fdr, file_list, gene_name, dimension, multi = False, group_id = None):
     fdr = df_fdr.iloc[dimension,][gene_name]
     dim = dimension
 
+    num_data = len(adata_list)
     plt.rc('font', size=20)
-    width = (len(adata_list) + 1) * 8
-    fig, axs = plt.subplots(2, len(adata_list) + 1, figsize=(width, 11))
+    width = (num_data + 1) * 8
+    fig, axs = plt.subplots(2, num_data + 1, figsize=(width, 11))
     
     coolwarm = plt.colormaps.get_cmap('coolwarm')
     n_colors = coolwarm.N // 2
     colors = coolwarm(np.linspace(0.5, 1, n_colors))
     cm = LinearSegmentedColormap.from_list('half_coolwarm', colors)
-
-    loc_1, emb_1, exp_1 = adata_list[0].obsm['spatial'], adata_list[0].obsm['SpaceExpress'][:, dim], adata_list[0][:, gene_name].X
-    loc_2, emb_2, exp_2 = adata_list[1].obsm['spatial'], adata_list[1].obsm['SpaceExpress'][:, dim], adata_list[1][:, gene_name].X
+    
+    loc = [adata_list[i].obsm['spatial'] for i in range(num_data)]
+    emb = [adata_list[i].obsm['SpaceExpress'][:, dim] for i in range(num_data)]
+    exp = [adata_list[i][:, gene_name].X for i in range(num_data)]
 
     gene_idx = np.where(adata_list[0].var_names == gene_name)[0][0]
-    pred_1, inter_1 = adata_list[0].obsm['DSE-pred'][:, gene_idx, dim], adata_list[0].obsm['DSE-inter'][:, gene_idx, dim]
-    pred_2, inter_2 = adata_list[1].obsm['DSE-pred'][:, gene_idx, dim], adata_list[1].obsm['DSE-inter'][:, gene_idx, dim]
+    pred = [adata_list[i].obsm['DSE-pred'][:, gene_idx, dim] for i in range(num_data)]
+    inter = [adata_list[i].obsm['DSE-inter'][:, gene_idx, dim] for i in range(num_data)]
     
-    exp_1, exp_2, rm_idx_1, rm_idx_2 = preprocess (exp_1, exp_2)
+    exp, rm_idx_list  = preprocess (exp)
+    [loc, emb, pred, inter] = rm_idx([loc, emb, pred, inter], rm_idx_list)
     
-    [loc_1, emb_1, pred_1, inter_1] = rm_idx([loc_1, emb_1, pred_1, inter_1], rm_idx_1)
-    [loc_2, emb_2, pred_2, inter_2] = rm_idx([loc_2, emb_2, pred_2, inter_2], rm_idx_2)
+    vmin, vmax = get_range(emb, 'max')
+    for i in range(num_data):
+        plot_scatter(fig, axs[0, i], loc[i], exp[i], 'cm', f'({file_list[i]}) Expression of {gene_name}', vmin = vmin, vmax = vmax)
     
-    vmin, vmax = get_range([exp_1, exp_2], 'quantile')
+    vmin, vmax = get_range(exp, 'quantile')
+    for i in range(num_data):
+        plot_scatter(fig, axs[1, i], loc[i], emb[i], 'gist_rainbow', f'({file_list[i]}) Dimension {dim}', vmin = vmin, vmax = vmax)
 
-    plot_scatter(fig, axs[1, 0], loc_1, exp_1, 'cm', f'({file_list[0]}) Expression of {gene_name}', vmin = vmin, vmax = vmax)
-    plot_scatter(fig, axs[1, 1], loc_2, exp_2, 'cm', f'({file_list[1]}) Expression of {gene_name}', vmin = vmin, vmax = vmax)
+    axs[0, num_data].text(0.5, 0.5, f'Gene: {gene_name}\nDimension: {dimension}\nFDR = {fdr:.2e}', ha='center', va='center', fontsize=24, transform=axs[0, num_data].transAxes)
+    axs[0, num_data].set_xticks([])    
+    axs[0, num_data].set_yticks([])  
 
-    vmin, vmax = get_range([emb_1, emb_2], 'max')
-
-    plot_scatter(fig, axs[0, 0], loc_1, emb_1, 'gist_rainbow', f'({file_list[0]}) Dimension {dim+1}', vmin = vmin, vmax = vmax)
-    plot_scatter(fig, axs[0, 1], loc_2, emb_2, 'gist_rainbow', f'({file_list[1]}) Dimension {dim+1}', vmin = vmin, vmax = vmax)
-    axs[0, 2].text(0.5, 0.5, f'Gene: {gene_name}\nDimension: {dimension}\nFDR = {fdr:.2e}', ha='center', va='center', fontsize=24, transform=axs[0, 2].transAxes)
-    axs[0, 2].set_xticks([])    
-    axs[0, 2].set_yticks([])  
+    if multi == True:
+        emb_1 = np.concatenate([emb[i] for i in range(len(emb)) if group_id[i] == 0])
+        emb_2 = np.concatenate([emb[i] for i in range(len(emb)) if group_id[i] == 1])
+        
+        pred_1 = np.concatenate([pred[i] for i in range(len(pred)) if group_id[i] == 0])
+        pred_2 = np.concatenate([pred[i] for i in range(len(pred)) if group_id[i] == 1])
     
+    else:
+        emb_1 = emb[0]
+        emb_2 = emb[1]
+        
+        pred_1 = pred[0]
+        pred_2 = pred[1]
+
     x1, y1 = gam(emb_1, pred_1)
     x2, y2 = gam(emb_2, pred_2)
-    
-    axs[1,2].plot(x1, y1, label='Naive', color='green', linewidth=4)
-    axs[1,2].plot(x2, y2, label='Agg. to Pup', color='orange', linewidth=4)
-    axs[1,2].set_ylabel(f'Exp. of ${gene_name}$')
-    axs[1,2].set_xlabel(f'Dimension {dim+1}')
-    axs[1,2].xaxis.set_label_coords(0.5, -0.2)  
-    axs[1,2].yaxis.set_label_coords(-0.12, 0.5) 
-    axs[1,2].legend(loc='best')
+
+    axs[1,num_data].plot(x1, y1, label='Group 0', color='green', linewidth=4)
+    axs[1,num_data].plot(x2, y2, label='Group 1', color='orange', linewidth=4)
+    axs[1,num_data].set_ylabel(f'Exp. of ${gene_name}$')
+    axs[1,num_data].set_xlabel(f'Dimension {dim}')
+    axs[1,num_data].xaxis.set_label_coords(0.5, -0.2)  
+    axs[1,num_data].yaxis.set_label_coords(-0.12, 0.5) 
+    axs[1,num_data].legend(loc='best')
 
     norm = plt.Normalize(vmin=0, vmax=1)
     sm = plt.cm.ScalarMappable(cmap='gist_rainbow', norm=norm)
     sm.set_array([])
     
-    divider = make_axes_locatable(axs[1,2])
+    divider = make_axes_locatable(axs[1,num_data])
     cax = divider.append_axes("bottom", size="4%", pad=0.5)
     cbar = fig.colorbar(sm, cax=cax, orientation='horizontal')
     cbar.set_ticks([])  

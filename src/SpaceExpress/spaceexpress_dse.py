@@ -168,6 +168,115 @@ def spline_multi_rep(df, k):
     # Assign the DataFrame to an R variable
     robjects.globalenv['input'] = r_df
     robjects.globalenv['df'] = k
+
+    r_script = """
+    suppressPackageStartupMessages(library(splines))
+    suppressPackageStartupMessages(library(lmtest))
+    suppressPackageStartupMessages(library(dplyr))
+    suppressPackageStartupMessages(library(lme4))
+    
+    colnames(input) = c("embedding","gene","group", "rep","cell_type")
+    data = input
+    data$group = as.factor(data$group)
+    data$cell_type = as.factor(data$cell_type)
+    
+    val1 = quantile(data$gene,0.99)
+    val2 = mean(data$gene) + 4*sd(data$gene)
+    val = min(val1, val2)
+    
+    rm_index = which(data$gene >= val)
+    
+    if (length(rm_index)!= 0) {
+        data = data[-rm_index,]  # removing cells with over 5 sd away from mean
+    }
+    
+    zero_variation_groups <- data %>% group_by(rep,group) %>% summarize(variation = var(gene), .groups = 'drop') %>% filter(variation == 0)
+    
+    if (nrow(zero_variation_groups) > 0) {
+        chisq = -1
+        predictions = rep(0, nrow(input))
+        interaction = rep(0, nrow(input))
+    } else {
+        data_temp = data %>% group_by(rep) %>% reframe(gene_scaled = scale(gene,center = F,scale = sd(gene))) %>% ungroup()
+        data$gene = data_temp$gene_scaled  # scaling but not centering expression within each replicate
+        spline_df = ns(data$embedding, df = df)
+        data = data.frame(spline_df, group = as.factor(data$group), gene = data$gene, rep = data$rep, cell_type = data$cell_type)
+
+        # Running the linear models with modified control to avoid singular fit warnings
+        formula = as.formula(paste0("gene ~ (", paste0("X", seq(1, df), collapse = " + "), ") * group + cell_type + (1 | rep)"))
+        full = lmer(formula = formula, data = data, control = lmerControl(check.conv.singular = "ignore", calc.derivs = FALSE))
+        
+        ct_index = grep(pattern = "cell_type", x = colnames(model.matrix(full)))
+        embd_terms = model.matrix(full)[, -ct_index]
+        embd_coef = summary(full)[["coefficients"]][-ct_index, 1]
+        predicted_full = embd_terms %*% embd_coef
+
+        # Running the null model
+        formula1 = as.formula(paste0("gene ~ ", paste0("X", seq(1, df), collapse = " + "), " + group + cell_type + (1 | rep)"))
+        null = lmer(formula = formula1, data = data, control = lmerControl(check.conv.singular = "ignore"))
+        
+        ct_index = grep(pattern = "cell_type", x = colnames(model.matrix(null)))
+        embd_terms = model.matrix(null)[, -ct_index]
+        embd_coef = summary(null)[["coefficients"]][-ct_index, 1]
+        predicted_null = embd_terms %*% embd_coef
+
+        # Evaluating the interaction terms
+        interaction_df = model.matrix(full)[, 2:(df+1)]
+        interaction_index = grep(pattern = ".group", x = colnames(model.matrix(full)))
+        interaction_coef = summary(full)[["coefficients"]][interaction_index, 1]
+        interaction_estimates_all = interaction_df %*% interaction_coef + summary(full)[["coefficients"]][df+2, 1]
+
+        # Likelihood Ratio Test
+        vals <- lrtest(null, full)$Chisq[2]
+        
+        # Returning the results
+        chisq = vals
+        generate_vector <- function(values, indices) {
+            length_result <- length(values) + length(indices)
+            result <- rep(0, length_result)
+            value_positions <- setdiff(seq_along(result), indices)
+            result[value_positions] <- values
+            return(result)
+        }    
+        
+        predictions = generate_vector(predicted_full, rm_index)
+        interaction = generate_vector(interaction_estimates_all, rm_index)
+    }
+    """
+
+    robjects.r(r_script)
+
+    test_statistics = robjects.globalenv['chisq']
+    test_statistics = np.array(test_statistics).astype(np.float64)
+
+    predictions = robjects.globalenv['predictions']
+    predictions = np.array(predictions).astype(np.float64)
+
+    interaction = robjects.globalenv['interaction']
+    interaction = np.array(interaction).astype(np.float64)
+        
+    return test_statistics, predictions, interaction
+
+
+
+def spline_multi_rep_archive(df, k):
+    """
+    Fitting a spline model to the data and calculating the likelihood ratio test statistic
+    
+    Parameters:
+    df (pd.DataFrame): A pandas DataFrame containing the data
+    knots (int): The number of knots to use in the spline model
+    
+    Returns:
+    test_statistics (np.array): An array of likelihood ratio test statistics
+    """
+    # Convert pandas DataFrame to R DataFrame
+    with localconverter(robjects.default_converter + pandas2ri.converter):
+        r_df = robjects.conversion.py2rpy(df)
+
+    # Assign the DataFrame to an R variable
+    robjects.globalenv['input'] = r_df
+    robjects.globalenv['df'] = k
     
 
     r_script = """
@@ -301,7 +410,7 @@ class calculate_test_statistic_multi_rep:
         self.group_id = group_id
         self.cell_type = cell_type
     
-    def __call__(self, g, d):
+    def __call__(self, d, g):
         """
         Calculate the test statistic for a given gene and embedding dimension
         
