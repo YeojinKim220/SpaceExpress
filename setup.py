@@ -33,14 +33,13 @@
 #   long_description=open('README.md').read(),
 #   long_description_content_type='text/markdown',
 # )
-
 from setuptools import setup, find_packages
 
 setup(
     name='SpaceExpress',
     version='0.1.0',
-    packages=find_packages(where='src'),  # Ensure all packages in src are found
-    package_dir={'': 'src'},
+    packages=find_packages(where='src'),  # Automatically find packages in 'src'
+    package_dir={'': 'src'},  # Specify the root package directory
     author='Yeojin Kim',
     author_email='ykim3030@gatech.edu',
     url='https://github.com/yeojinkim220',

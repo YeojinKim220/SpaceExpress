@@ -481,8 +481,9 @@ def SpaceExpress_DSE(emb, adata_list, cell_type = None, k = 300, n_jobs=-1, mult
     
     num_cell_list = [adata.shape[0] for adata in adata_list]
     predictions_list, interactions_list = [np.zeros((adata.shape[0], num_gene, num_dim)) for adata in adata_list], [np.zeros((adata.shape[0], num_gene, num_dim)) for adata in adata_list]
-    for idx, (g, d) in enumerate(jobs):
+    for idx, (d, g) in enumerate(jobs):
         test_stat, pred, inter = results[idx]
+        # print(f"test_stat: {test_stat}, shape: {test_stat[0].shape}, test_statistics: {test_statistics.shape}")
         test_statistics[d, g] = test_stat[0]
         
         idx1, idx2 = 0, 0

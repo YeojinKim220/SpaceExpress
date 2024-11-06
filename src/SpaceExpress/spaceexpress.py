@@ -9,7 +9,7 @@ from sklearn.neighbors import kneighbors_graph
 from tqdm import tqdm
 import copy
 import scipy
-from .spaceexpress_dse import *
+import scanpy as sc
 
 def get_index (data):
     n_cells = data.shape[0]

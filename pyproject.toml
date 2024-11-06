@@ -1,0 +1,10 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "SpaceExpress"  # This is required
+version = "0.1.0"
+description = "A Python package for spatial transcriptomics"
+authors = [{name = "Yeojin Kim", email = "ykim3030@gatech.edu"}]
+dependencies = []  # Add any dependencies here if necessary

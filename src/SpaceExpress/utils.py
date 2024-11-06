@@ -5,6 +5,7 @@ from sklearn.neighbors import kneighbors_graph
 import pickle
 import matplotlib.pyplot as plt
 import os 
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 def make_complete_graph(pos, k):
     """
@@ -263,7 +264,11 @@ def plot_scatter(fig, ax, loc, color, cmap, title, stream=False, vmin = None, vm
     plt.rc('font', size=20)
 
     if cmap == 'cm':
-        cmap = LinearSegmentedColormap.from_list('half_coolwarm', colors)
+        coolwarm = plt.colormaps.get_cmap('coolwarm')
+        n_colors = coolwarm.N // 2
+        colors = coolwarm(np.linspace(0.5, 1, n_colors))        
+        cmap = LinearSegmentedColormap.from_list('half_coolwarm', colors)        
+        
     scatter = ax.scatter(loc[:, 0], loc[:, 1], c=color, cmap=cmap, s=5, alpha=1, vmin = vmin, vmax = vmax)
     ax.set_title(title)
     ax.set_xticks([])    
@@ -346,7 +351,6 @@ def plot_DSE (adata_list, df_fdr, file_list, gene_name, dimension):
     sm = plt.cm.ScalarMappable(cmap='gist_rainbow', norm=norm)
     sm.set_array([])
     
-    from mpl_toolkits.axes_grid1 import make_axes_locatable
     divider = make_axes_locatable(axs[1,2])
     cax = divider.append_axes("bottom", size="4%", pad=0.5)
     cbar = fig.colorbar(sm, cax=cax, orientation='horizontal')

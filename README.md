@@ -19,7 +19,7 @@ conda create -n spaceexpress python=3.11 scikit-learn pandas matplotlib jupyter 
 pip3 install torch
 
 conda env create -f environment.yml
-conda activate spaceexpress
+conda activate spaceexpress-env
 
 cd SpaceExpress
 python -m pip install -e .
