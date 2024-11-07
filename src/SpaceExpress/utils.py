@@ -310,12 +310,11 @@ def plot_DSE (adata_list, df_fdr, file_list, gene_name, dimension, multi = False
     
     exp, rm_idx_list  = preprocess (exp)
     [loc, emb, pred, inter] = rm_idx([loc, emb, pred, inter], rm_idx_list)
-    
-    vmin, vmax = get_range(emb, 'max')
+    vmin, vmax = get_range(exp, 'quantile')
     for i in range(num_data):
         plot_scatter(fig, axs[0, i], loc[i], exp[i], 'cm', f'({file_list[i]}) Expression of {gene_name}', vmin = vmin, vmax = vmax)
     
-    vmin, vmax = get_range(exp, 'quantile')
+    vmin, vmax = get_range(emb, 'max')
     for i in range(num_data):
         plot_scatter(fig, axs[1, i], loc[i], emb[i], 'gist_rainbow', f'({file_list[i]}) Dimension {dim}', vmin = vmin, vmax = vmax)
 
