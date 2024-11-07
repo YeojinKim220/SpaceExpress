@@ -1,32 +1,4 @@
 # SpaceExpress
-SpaceExpress
-
-## News
-2024.05.07  
-
-## Overview
-
-## Getting started
-See [Tutorials](./docs/source/notebook/).
-For single replicate for each group, check [Tutorial 1](./docs/source/notebook/Tutorial_1.ipynb). 
-For multiple replicate for each group, check [Tutorial 1](./docs/source/notebook/Tutorial_1.ipynb). 
-
-## Software dependencies
-Check requirement
-
-## Installation
-```bash
-conda env create -f environment.yml
-conda activate spaceexpress-env
-
-cd SpaceExpress
-python -m pip install -e .
-```
-
-## Citation
-
-
-# SpaceExpress
 
 SpaceExpress is a tool for differential spatial expression (DSE) analysis using intrinsic coordinate systems of tissues. It leverages spline models and likelihood ratio testing to identify significant spatial gene expression changes across different biological conditions or experimental groups.
 
