@@ -3,7 +3,7 @@
 SpaceExpress is a tool for differential spatial expression (DSE) analysis using intrinsic coordinate systems of tissues. It leverages spline models and likelihood ratio testing to identify significant spatial gene expression changes across different biological conditions or experimental groups.
 
 ## News
-**2024.11.XX**  
+**2024.11.26**  
 - Initial release of SpaceExpress, enabling robust differential spatial expression analysis with support for single and multiple replicates.
 
 ## Getting Started
