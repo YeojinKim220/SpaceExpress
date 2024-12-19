@@ -22,6 +22,7 @@ To ensure compatibility and optimal performance, please check the required softw
 Install the SpaceExpress environment and package with the following commands:
 
 ```bash
+git clone https://github.com/YeojinKim220/SpaceExpress.git
 conda env create -f environment.yml
 conda activate spaceexpress-env
 
