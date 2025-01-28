@@ -2,8 +2,8 @@ name: Publish Workflows
 on:
   push:
     branches:
-     - master  # master 브랜치에 push가 발생할 때 실행
-
+     - master  
+     
 jobs:
   publish:
     name: PUBLISH

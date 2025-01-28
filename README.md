@@ -26,8 +26,7 @@ git clone https://github.com/YeojinKim220/SpaceExpress.git
 conda env create -f environment.yml
 conda activate spaceexpress-env
 
-cd SpaceExpress
-python -m pip install -e .
+pip install SpaceExpress
 ```
 
 This will create and activate a Conda environment with all necessary dependencies and install SpaceExpress in editable mode for local development.
@@ -46,6 +45,9 @@ This will create and activate a Conda environment with all necessary dependencie
   # Step 3: Install Python packages using pip
   pip install pygam
   pip install torch
+
+  # Step 4: Install SpaceExpress
+  pip install SpaceExpress
   ```
 </details>
 
