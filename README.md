@@ -34,4 +34,14 @@ This will create and activate a Conda environment with all necessary dependencie
 
 ## Citation
 If you use SpaceExpress in your research, please cite:
-- **[Author(s), Title, Journal, Year]**
+```
+@article{kim2024spaceexpress,
+  title={SpaceExpress: a method for comparative spatial transcriptomics based on intrinsic coordinate systems of tissues},
+  author={Kim, Yeojin and Ojha, Abhishek and Schrader, Alex and Lee, Juyeon and Wu, Zijun and Traniello, Ian M and Robinson, Gene E and Han, Hee Sun and Zhao, Sihai D and Sinha, Saurabh},
+  journal={bioRxiv},
+  pages={2024--12},
+  year={2024},
+  publisher={Cold Spring Harbor Laboratory}
+}
+```
+
