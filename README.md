@@ -32,6 +32,23 @@ python -m pip install -e .
 
 This will create and activate a Conda environment with all necessary dependencies and install SpaceExpress in editable mode for local development.
 
+<details>
+  <summary><b>Note:</b> If the installation via the provided <code>environment.yml</code> file fails, you can manually set up the environment using the steps below:</summary>
+
+  ```bash
+  # Step 1: Create and activate a new Conda environment
+  conda create -n test_spaceexpress python=3.11 scikit-learn pandas matplotlib jupyter scanpy rpy2 -y
+  conda activate test_spaceexpress
+
+  # Step 2: Install additional dependencies
+  conda install -y -c conda-forge python-igraph r-lmtest r-fitdistrplus r-dplyr r-lme4
+
+  # Step 3: Install Python packages using pip
+  pip install pygam
+  pip install torch
+  ```
+</details>
+
 ## Citation
 If you use SpaceExpress in your research, please cite:
 ```
