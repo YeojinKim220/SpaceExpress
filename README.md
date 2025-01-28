@@ -37,8 +37,8 @@ This will create and activate a Conda environment with all necessary dependencie
 
   ```bash
   # Step 1: Create and activate a new Conda environment
-  conda create -n test_spaceexpress python=3.11 scikit-learn pandas matplotlib jupyter scanpy rpy2 -y
-  conda activate test_spaceexpress
+  conda create -n spaceexpress-env python=3.11 scikit-learn pandas matplotlib jupyter scanpy rpy2 -y
+  conda activate spaceexpress-env
 
   # Step 2: Install additional dependencies
   conda install -y -c conda-forge python-igraph r-lmtest r-fitdistrplus r-dplyr r-lme4
