@@ -1,5 +1,8 @@
 # SpaceExpress
 
+![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
+![Downloads](https://img.shields.io/pypi/dm/SpaceExpress)
+
 SpaceExpress is a tool for differential spatial expression (DSE) analysis using intrinsic coordinate systems of tissues. It leverages spline models and likelihood ratio testing to identify significant spatial gene expression changes across different biological conditions or experimental groups.
 
 ## News
