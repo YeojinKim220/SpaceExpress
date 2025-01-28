@@ -53,6 +53,12 @@ This will create and activate a Conda environment with all necessary dependencie
   ```
 </details>
 
+## Tested Environments and Compatibility
+- **Linux (Red Hat Enterprise Linux 9.4)**:  
+  - Python 3.11.11, Scikit-learn 1.6.0, Pandas 2.2.3, Matplotlib 3.10.0, Jupyter 1.1.1, Scanpy 1.10.4, Rpy2 3.5.11, Python-igraph 0.11.8, R-lmtest 0.9_40, R-fitdistrplus 1.2_1, R-dplyr 1.1.4, R-lme4 1.1_35.5, Pygam 0.9.1, Torch 2.5.1.
+- **macOS (Sonoma 14.3)**:  
+  - Python 3.11.10, Scikit-learn 1.5.1, Pandas 2.2.2, Matplotlib 3.9.2, Jupyter 1.0.0, Scanpy 1.10.3, Rpy2 3.5.11, Python-igraph 0.11.6, R-lmtest 0.9_40, R-fitdistrplus 1.1_11, R-dplyr 1.1.4, R-lme4 1.1_35.5, Pygam 0.9.1, Torch 2.5.1.
+
 ## Citation
 If you use SpaceExpress in your research, please cite:
 ```
