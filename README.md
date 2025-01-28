@@ -15,13 +15,13 @@ To learn how to use SpaceExpress for your spatial transcriptomics data, follow t
 - **Single Replicate Analysis**: Check [Tutorial 1](./docs/source/notebook/Tutorial_1.ipynb).
 - **Multiple Replicate Analysis**: Check [Tutorial 2](./docs/source/notebook/Tutorial_2.ipynb).
 
-These tutorials will guide you through data preparation, model setup, and interpreting the results of differential spatial expression analysis.
+These tutorials will guide you through data preparation, model setup, and interpreting the results of differential spatial expression analysis. The expected run time for Tutorial 1 is approximately 1 hour and 30 minutes, while Tutorial 2 is estimated to take around 2 hours and 30 minutes. 
 
 ## Software Dependencies
 To ensure compatibility and optimal performance, please check the required software dependencies specified in the `environment.yml` file. These include key libraries such as `scanpy`, `pandas`, `numpy`, and `rpy2` for seamless integration with R-based statistical models.
 
 ## Installation
-Install the SpaceExpress environment and package with the following commands (Typical installation on a desktop computer takes approximately 5–10 minutes.):
+Install the SpaceExpress environment and package with the following commands (Expected installation time is approximately 5–10 minutes.):
 
 ```bash
 git clone https://github.com/YeojinKim220/SpaceExpress.git
