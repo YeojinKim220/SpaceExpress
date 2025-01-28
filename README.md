@@ -21,7 +21,7 @@ These tutorials will guide you through data preparation, model setup, and interp
 To ensure compatibility and optimal performance, please check the required software dependencies specified in the `environment.yml` file. These include key libraries such as `scanpy`, `pandas`, `numpy`, and `rpy2` for seamless integration with R-based statistical models.
 
 ## Installation
-Install the SpaceExpress environment and package with the following commands:
+Install the SpaceExpress environment and package with the following commands (Typical installation on a desktop computer takes approximately 5–10 minutes.):
 
 ```bash
 git clone https://github.com/YeojinKim220/SpaceExpress.git
