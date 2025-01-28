@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='SpaceExpress',
-    version='0.1.0',
+    version='0.1.2',
     packages=find_packages(where='src'),  # Automatically find packages in 'src'
     package_dir={'': 'src'},  # Specify the root package directory
     author='Yeojin Kim',

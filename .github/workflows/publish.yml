@@ -1,0 +1,43 @@
+name: Publish Workflows
+on:
+  push:
+    branches:
+     - master  # master 브랜치에 push가 발생할 때 실행
+
+jobs:
+  publish:
+    name: PUBLISH
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: CHECKOUT
+      uses: actions/checkout@v4  
+
+    - name: SET UP PYTHON
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"  
+
+    - name: INSTALL DEPENDENCIES
+      run: |
+        python -m pip install --upgrade build 
+
+    - name: BUILD PACKAGE
+      run: |
+        python -m build 
+
+    - name: PUBLISH
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        password: ${{ secrets.PYPI_API_TOKEN }}  
+
+    - name: RUN TESTS
+      run: |
+        python -m pip install -r requirements.txt
+        python -m pytest  
+  
+    - name: CREATE TAG
+      run: |
+        git tag v$(python setup.py --version)
+        git push origin --tags
+
