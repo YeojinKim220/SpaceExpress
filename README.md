@@ -14,6 +14,7 @@ To learn how to use SpaceExpress for your spatial transcriptomics data, follow t
 - See **[Tutorials](./docs/source/notebook/)**.
 - **Single Replicate Analysis**: Check [Tutorial 1](./docs/source/notebook/Tutorial_1.ipynb).
 - **Multiple Replicate Analysis**: Check [Tutorial 2](./docs/source/notebook/Tutorial_2.ipynb).
+- **Simulated Data Generation**: Check [Simulated Spatial Transcriptomics Data](./docs/source/notebook/Simulated_Spatial_Transcriptomics_Data.ipynb).
 
 These tutorials will guide you through data preparation, model setup, and interpreting the results of differential spatial expression analysis. The expected run time for Tutorial 1 is approximately 1 hour and 30 minutes, while Tutorial 2 is estimated to take around 2 hours and 30 minutes. 
 
