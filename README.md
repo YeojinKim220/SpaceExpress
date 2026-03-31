@@ -58,6 +58,8 @@ This will create and activate a Conda environment with all necessary dependencie
 - **Linux (Red Hat Enterprise Linux 9.4)**: `python-3.11.11`, `scikit-learn-1.6.0`, `pandas-2.2.3`, `matplotlib-3.10.0`, `jupyter-1.1.1`, `scanpy-1.10.4`, `rpy2-3.5.11`, `python-igraph-0.11.8`, `r-lmtest-0.9_40`, `r-fitdistrplus-1.2_1`, `r-dplyr-1.1.4`, `r-lme4-1.1_35.5`, `pygam-0.9.1`, `torch-2.5.1`.
 - **macOS (Sonoma 14.3)**: `python-3.11.10`, `scikit-learn-1.5.1`, `pandas-2.2.2`, `matplotlib-3.9.2`, `jupyter-1.0.0`, `scanpy-1.10.3`, `rpy2-3.5.11`, `python-igraph-0.11.6`, `r-lmtest-0.9_40`, `r-fitdistrplus-1.1_11`, `r-dplyr-1.1.4`, `r-lme4-1.1_35.5`, `pygam-0.9.1`, `torch-2.5.1`.
 
+## Guidelines for choosing hyperparameters
+We empirically observed that this hyperparameter setting is effective for datasets with sizes ranging from approximately 3k to 10k cells. For datasets with substantially fewer cells, we recommend using smaller values of the "k" parameter in the SpaceExpress_DSE function.
 
 ## Citation
 If you use SpaceExpress in your research, please cite:
