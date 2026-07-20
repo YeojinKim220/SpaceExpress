@@ -4,6 +4,8 @@ import pickle
 from joblib import Parallel, delayed
 import numpy as np
 from tqdm import tqdm
+import warnings
+import scipy.sparse as sp
 
 from rpy2.robjects import pandas2ri
 from rpy2.robjects.conversion import localconverter
@@ -19,6 +21,40 @@ lmtest = importr('lmtest')
 fitdistrplus = importr('fitdistrplus')
 dplyr = importr('dplyr')
 lme4 = importr('lme4')
+
+def _as_dense_vector(x):
+    """Return a dense 1D numpy array from dense or sparse AnnData slices."""
+    if sp.issparse(x):
+        x = x.toarray()
+    return np.asarray(x).ravel()
+
+
+def _fallback_dse_result(n_cells):
+    """Fail-safe DSE result for a single gene/dimension fit failure."""
+    return np.array([-1.0], dtype=np.float64), np.zeros(n_cells, dtype=np.float64), np.zeros(n_cells, dtype=np.float64)
+
+
+def _warn_if_k_is_large(adata_list, k, multi=False, cell_type=None, group_id=None):
+    cell_counts = [adata.shape[0] for adata in adata_list]
+    min_cells = min(cell_counts) if cell_counts else 0
+    if min_cells and k > max(10, min_cells // 10):
+        warnings.warn(
+            f"SpaceExpress_DSE k={k} may be large for the smallest sample ({min_cells} cells). "
+            "For small or multi-replicate datasets, consider lowering k to reduce rank-deficient spline fits.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+    if multi and group_id is not None:
+        groups = sorted(set(group_id))
+        if len(groups) != 2:
+            raise ValueError("Current multi-replicate DSE implementation supports exactly two groups.")
+        for group in groups:
+            if sum(1 for g in group_id if g == group) < 1:
+                raise ValueError(f"Group {group!r} has no replicate.")
+    if cell_type is not None:
+        missing = [i for i, adata in enumerate(adata_list) if cell_type not in adata.obs]
+        if missing:
+            raise ValueError(f"cell_type column {cell_type!r} is missing from adata_list indices {missing}.")
 
 def spline(df, k):
     """
@@ -201,35 +237,43 @@ def spline_multi_rep(df, k):
         spline_df = ns(data$embedding, df = df)
         data = data.frame(spline_df, group = as.factor(data$group), gene = data$gene, rep = data$rep)
        
-        # Running the linear models with modified control to avoid singular fit warnings
-        formula = as.formula(paste0("gene ~ (", paste0("X", seq(1, df), collapse = " + "), ") * group  + (1 | rep)"))
-        full = lmer(formula = formula, data = data, control = lmerControl(check.conv.singular = "ignore", calc.derivs = FALSE))
-        
-        # ct_index = grep(pattern = "cell_type", x = colnames(model.matrix(full)))
-        embd_terms = model.matrix(full)
-        embd_coef = summary(full)[["coefficients"]]
-        predicted_full = embd_terms %*% embd_coef
-        
-        # Running the null model
-        formula1 = as.formula(paste0("gene ~ ", paste0("X", seq(1, df), collapse = " + "), " + group  + (1 | rep)"))
-        null = lmer(formula = formula1, data = data, control = lmerControl(check.conv.singular = "ignore"))
-        
-        # ct_index = grep(pattern = "cell_type", x = colnames(model.matrix(null)))
-        embd_terms = model.matrix(null)
-        embd_coef = summary(null)[["coefficients"]]
-        predicted_null = embd_terms %*% embd_coef
-        
-        # Evaluating the interaction terms
-        interaction_df = model.matrix(full)[, 2:(df+1)]
-        interaction_index = grep(pattern = ".group", x = colnames(model.matrix(full)))
-        interaction_coef = summary(full)[["coefficients"]][interaction_index, 1]
-        interaction_estimates_all = interaction_df %*% interaction_coef + summary(full)[["coefficients"]][df+2, 1]
-        
-        # Likelihood Ratio Test
-        vals <- lrtest(null, full)$Chisq[2]
-        
-        # Returning the results
-        chisq = vals
+        model_result <- tryCatch({
+            # Running the linear models with modified control to avoid singular fit warnings
+            formula = as.formula(paste0("gene ~ (", paste0("X", seq(1, df), collapse = " + "), ") * group  + (1 | rep)"))
+            full = lmer(formula = formula, data = data, control = lmerControl(check.conv.singular = "ignore", calc.derivs = FALSE))
+
+            # Running the null model
+            formula1 = as.formula(paste0("gene ~ ", paste0("X", seq(1, df), collapse = " + "), " + group  + (1 | rep)"))
+            null = lmer(formula = formula1, data = data, control = lmerControl(check.conv.singular = "ignore"))
+
+            X_full = model.matrix(full)
+            beta_full = fixef(full)
+            full_terms = intersect(colnames(X_full), names(beta_full))
+            predicted_full = as.vector(X_full[, full_terms, drop = FALSE] %*% beta_full[full_terms])
+
+            # Evaluating the interaction terms by coefficient name so rank-dropped columns are ignored safely.
+            interaction_terms = grep(pattern = ":", x = names(beta_full), value = TRUE)
+            interaction_terms = interaction_terms[grepl("group", interaction_terms)]
+            if (length(interaction_terms) > 0) {
+                interaction_df = X_full[, interaction_terms, drop = FALSE]
+                interaction_coef = beta_full[interaction_terms]
+                interaction_estimates_all = as.vector(interaction_df %*% interaction_coef)
+            } else {
+                interaction_estimates_all = rep(0, nrow(data))
+            }
+            group_terms = grep(pattern = "^group", x = names(beta_full), value = TRUE)
+            if (length(group_terms) > 0) {
+                interaction_estimates_all = interaction_estimates_all + beta_full[group_terms[1]]
+            }
+
+            # Likelihood Ratio Test
+            vals <- lrtest(null, full)$Chisq[2]
+            list(chisq = vals, predicted_full = predicted_full, interaction_estimates_all = interaction_estimates_all)
+        }, error = function(e) {
+            list(chisq = -1, predicted_full = rep(0, nrow(data)), interaction_estimates_all = rep(0, nrow(data)))
+        })
+
+        chisq = model_result$chisq
         generate_vector <- function(values, indices) {
             length_result <- length(values) + length(indices)
             result <- rep(0, length_result)
@@ -237,8 +281,8 @@ def spline_multi_rep(df, k):
             result[value_positions] <- values
             return(result)
         }    
-        predictions = generate_vector(predicted_full, rm_index)
-        interaction = generate_vector(interaction_estimates_all, rm_index)
+        predictions = generate_vector(model_result$predicted_full, rm_index)
+        interaction = generate_vector(model_result$interaction_estimates_all, rm_index)
     }
     """
 
@@ -307,35 +351,43 @@ def spline_multi_rep_ct(df, k):
         spline_df = ns(data$embedding, df = df)
         data = data.frame(spline_df, group = as.factor(data$group), gene = data$gene, rep = data$rep, cell_type = data$cell_type)
 
-        # Running the linear models with modified control to avoid singular fit warnings
-        formula = as.formula(paste0("gene ~ (", paste0("X", seq(1, df), collapse = " + "), ") * group + cell_type + (1 | rep)"))
-        full = lmer(formula = formula, data = data, control = lmerControl(check.conv.singular = "ignore", calc.derivs = FALSE))
-        
-        ct_index = grep(pattern = "cell_type", x = colnames(model.matrix(full)))
-        embd_terms = model.matrix(full)[, -ct_index]
-        embd_coef = summary(full)[["coefficients"]][-ct_index, 1]
-        predicted_full = embd_terms %*% embd_coef
+        model_result <- tryCatch({
+            # Running the linear models with modified control to avoid singular fit warnings
+            formula = as.formula(paste0("gene ~ (", paste0("X", seq(1, df), collapse = " + "), ") * group + cell_type + (1 | rep)"))
+            full = lmer(formula = formula, data = data, control = lmerControl(check.conv.singular = "ignore", calc.derivs = FALSE))
 
-        # Running the null model
-        formula1 = as.formula(paste0("gene ~ ", paste0("X", seq(1, df), collapse = " + "), " + group + cell_type + (1 | rep)"))
-        null = lmer(formula = formula1, data = data, control = lmerControl(check.conv.singular = "ignore"))
-        
-        ct_index = grep(pattern = "cell_type", x = colnames(model.matrix(null)))
-        embd_terms = model.matrix(null)[, -ct_index]
-        embd_coef = summary(null)[["coefficients"]][-ct_index, 1]
-        predicted_null = embd_terms %*% embd_coef
+            # Running the null model
+            formula1 = as.formula(paste0("gene ~ ", paste0("X", seq(1, df), collapse = " + "), " + group + cell_type + (1 | rep)"))
+            null = lmer(formula = formula1, data = data, control = lmerControl(check.conv.singular = "ignore"))
 
-        # Evaluating the interaction terms
-        interaction_df = model.matrix(full)[, 2:(df+1)]
-        interaction_index = grep(pattern = ".group", x = colnames(model.matrix(full)))
-        interaction_coef = summary(full)[["coefficients"]][interaction_index, 1]
-        interaction_estimates_all = interaction_df %*% interaction_coef + summary(full)[["coefficients"]][df+2, 1]
+            X_full = model.matrix(full)
+            beta_full = fixef(full)
+            non_cell_terms = setdiff(intersect(colnames(X_full), names(beta_full)), grep(pattern = "^cell_type", x = names(beta_full), value = TRUE))
+            predicted_full = as.vector(X_full[, non_cell_terms, drop = FALSE] %*% beta_full[non_cell_terms])
 
-        # Likelihood Ratio Test
-        vals <- lrtest(null, full)$Chisq[2]
-        
-        # Returning the results
-        chisq = vals
+            # Evaluating the interaction terms by coefficient name so rank-dropped columns are ignored safely.
+            interaction_terms = grep(pattern = ":", x = names(beta_full), value = TRUE)
+            interaction_terms = interaction_terms[grepl("group", interaction_terms)]
+            if (length(interaction_terms) > 0) {
+                interaction_df = X_full[, interaction_terms, drop = FALSE]
+                interaction_coef = beta_full[interaction_terms]
+                interaction_estimates_all = as.vector(interaction_df %*% interaction_coef)
+            } else {
+                interaction_estimates_all = rep(0, nrow(data))
+            }
+            group_terms = grep(pattern = "^group", x = names(beta_full), value = TRUE)
+            if (length(group_terms) > 0) {
+                interaction_estimates_all = interaction_estimates_all + beta_full[group_terms[1]]
+            }
+
+            # Likelihood Ratio Test
+            vals <- lrtest(null, full)$Chisq[2]
+            list(chisq = vals, predicted_full = predicted_full, interaction_estimates_all = interaction_estimates_all)
+        }, error = function(e) {
+            list(chisq = -1, predicted_full = rep(0, nrow(data)), interaction_estimates_all = rep(0, nrow(data)))
+        })
+
+        chisq = model_result$chisq
         generate_vector <- function(values, indices) {
             length_result <- length(values) + length(indices)
             result <- rep(0, length_result)
@@ -344,8 +396,8 @@ def spline_multi_rep_ct(df, k):
             return(result)
         }    
         
-        predictions = generate_vector(predicted_full, rm_index)
-        interaction = generate_vector(interaction_estimates_all, rm_index)
+        predictions = generate_vector(model_result$predicted_full, rm_index)
+        interaction = generate_vector(model_result$interaction_estimates_all, rm_index)
     }
     """
 
@@ -385,8 +437,9 @@ class calculate_test_statistic_multi_rep:
         emb = np.concatenate([self.adata_list[i].obsm['SpaceExpress'][:, d] for i in range(len(self.adata_list))])
         g_id = np.concatenate([np.array([self.group_id[i]]*self.adata_list[i].X.shape[0]) for i in range(len(self.adata_list))])
         rep = np.concatenate([np.array([i]*self.adata_list[i].X.shape[0]) for i in range(len(self.adata_list))])
-        exp = np.concatenate([self.adata_list[i].X[:, g] for i in range(len(self.adata_list))])
+        exp = np.concatenate([_as_dense_vector(self.adata_list[i].X[:, g]) for i in range(len(self.adata_list))])
         
+        n_cells_total = sum(adata.X.shape[0] for adata in self.adata_list)
         if self.cell_type != None:
             ct = np.concatenate([self.adata_list[i].obs[self.cell_type].values.tolist() for i in range(len(self.adata_list))])
             df = pd.DataFrame({'emb': emb, 'exp': exp, 'group_id': g_id, 'rep': rep, 'cell_type':ct})
@@ -394,8 +447,9 @@ class calculate_test_statistic_multi_rep:
             try:    
                 test_statistic = spline_multi_rep_ct(df, self.k)
                 return test_statistic
-            except:
-                print(d, g)
+            except Exception as e:
+                warnings.warn(f"DSE fit failed at dim={d}, gene={g}: {e}", RuntimeWarning)
+                return _fallback_dse_result(n_cells_total)
             
         else:
             df = pd.DataFrame({'emb': emb, 'exp': exp, 'group_id': g_id, 'rep': rep})
@@ -403,8 +457,9 @@ class calculate_test_statistic_multi_rep:
             try:    
                 test_statistic = spline_multi_rep(df, self.k)
                 return test_statistic
-            except:
-                print(d, g)
+            except Exception as e:
+                warnings.warn(f"DSE fit failed at dim={d}, gene={g}: {e}", RuntimeWarning)
+                return _fallback_dse_result(n_cells_total)
 
 
 class calculate_test_statistic:
@@ -424,17 +479,19 @@ class calculate_test_statistic:
         Returns:
         test_statistic (float): The likelihood ratio test statistic
         """
+        n_cells_total = self.adata_1.X.shape[0] + self.adata_2.X.shape[0]
         # Extract the embedding and expression data
         emb = np.concatenate([self.adata_1.obsm['SpaceExpress'][:, d], self.adata_2.obsm['SpaceExpress'][:, d]])
         data_id = np.concatenate([np.array([0]*self.adata_1.X.shape[0]), np.array([1]*self.adata_2.X.shape[0])])
-        exp = np.concatenate([self.adata_1.X[:, g], self.adata_2.X[:, g]])
+        exp = np.concatenate([_as_dense_vector(self.adata_1.X[:, g]), _as_dense_vector(self.adata_2.X[:, g])])
         df = pd.DataFrame({'emb': emb, 'exp': exp, 'data_id': data_id})
         # Calculate the test statistic
         try:    
             test_statistic = spline(df, self.k)
             return test_statistic
-        except:
-            print(d, g)
+        except Exception as e:
+            warnings.warn(f"DSE fit failed at dim={d}, gene={g}: {e}", RuntimeWarning)
+            return _fallback_dse_result(n_cells_total)
         
 
 def empirical_null(df, quant_val = 0.75):
@@ -468,15 +525,41 @@ def empirical_null(df, quant_val = 0.75):
         T <- as.numeric(df[i,])
         rm_index <- which(T == -1)
         T <- T[!T %in% T[rm_index]]
+        T <- T[is.finite(T)]
+
+        generate_vector <- function(values, indices) {
+            length_result <- length(values) + length(indices)
+            result <- rep(0, length_result)
+            value_positions <- setdiff(seq_along(result), indices)
+            result[value_positions] <- values
+            return(result)
+        }
+
+        if (length(T) < 2 || var(T) == 0) {
+            fdr[i,] = generate_vector(rep(1, length(T)), rm_index)
+            next
+        }
         
         # Define the quantile value for thresholding
         q = quantile(T, quant_val)
         
         # Extract the subset of T values below the quantile threshold
         A0 = T[T < q]
+        A0 = A0[is.finite(A0) & A0 > 0]
+        if (length(A0) < 2 || var(A0) == 0) {
+            fdr[i,] = generate_vector(rep(1, length(T)), rm_index)
+            next
+        }
         
         # Fit a gamma distribution to the subset of T values
-        fit_a0 = fitdist(data = A0, distr = "gamma", method = "mle")
+        fit_a0 = tryCatch(
+            fitdist(data = A0, distr = "gamma", method = "mle"),
+            error = function(e) NULL
+        )
+        if (is.null(fit_a0)) {
+            fdr[i,] = generate_vector(rep(1, length(T)), rm_index)
+            next
+        }
         
         # Extract the shape (k) and rate (1/theta) parameters of the fitted gamma distribution
         k = fit_a0$estimate[1]
@@ -490,14 +573,6 @@ def empirical_null(df, quant_val = 0.75):
         num = (1 - pgamma(T, shape = k, scale = theta))
         denom = 1 - ecdf(T)(T)
         fdr_new = p0 * num / (denom + 1e-5)
-        
-        generate_vector <- function(values, indices) {
-            length_result <- length(values) + length(indices)
-            result <- rep(0, length_result)
-            value_positions <- setdiff(seq_along(result), indices)
-            result[value_positions] <- values
-            return(result)
-        }            
         
         fdr[i,] = generate_vector(fdr_new, rm_index)
     } 
@@ -525,6 +600,8 @@ def SpaceExpress_DSE(emb, adata_list, cell_type = None, k = 300, n_jobs=-1, mult
     Returns:
     df_fdr (pd.DataFrame): A pandas DataFrame containing the false discovery rates
     """
+    _warn_if_k_is_large(adata_list, k, multi=multi, cell_type=cell_type, group_id=group_id)
+
     for i in range(len(adata_list)):
         adata_list[i].obsm['SpaceExpress'] = emb[i]
         
@@ -539,6 +616,8 @@ def SpaceExpress_DSE(emb, adata_list, cell_type = None, k = 300, n_jobs=-1, mult
     
     if multi == True:
         assert group_id != None, "There is no group_id"
+        if len(group_id) != len(adata_list):
+            raise ValueError("group_id length must match adata_list length.")
         cal_statistic = calculate_test_statistic_multi_rep(adata_list, cell_type = cell_type, k = k, group_id = group_id)
     else:    
         cal_statistic = calculate_test_statistic(adata_1, adata_2, k = k)
@@ -576,8 +655,8 @@ def SpaceExpress_DSE(emb, adata_list, cell_type = None, k = 300, n_jobs=-1, mult
     df_test_statistics = pd.DataFrame(data=test_statistics, index=range(num_dim), columns=list(adata_list[0].var_names))
     df_fdr = empirical_null(df_test_statistics, quant_val)
 
-    adata_list[0].varm['DSE-fdr'] = df_fdr.T
-    adata_list[1].varm['DSE-fdr'] = df_fdr.T
+    for i in range(len(adata_list)):
+        adata_list[i].varm['DSE-fdr'] = df_fdr.T
     
     for i in range(len(adata_list)):
         adata_list[i].obsm['DSE-pred'] = predictions_list[i]
@@ -620,4 +699,3 @@ def summary_DSE (df, threshold = 0.001):
     # Convert the summary dictionary to a DataFrame
     summary_df = pd.DataFrame(summary_dict)
     return summary_df
-
