@@ -73,4 +73,3 @@ If you use SpaceExpress in your research, please cite:
   publisher={Cold Spring Harbor Laboratory}
 }
 ```
-
