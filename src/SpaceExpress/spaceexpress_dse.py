@@ -56,7 +56,7 @@ def _warn_if_k_is_large(adata_list, k, multi=False, cell_type=None, group_id=Non
         if missing:
             raise ValueError(f"cell_type column {cell_type!r} is missing from adata_list indices {missing}.")
 
-def spline(df, k):
+def spline(df, k, remove_mean_sd_outliers=True):
     """
     Fitting a spline model to the data and calculating the likelihood ratio test statistic
     
@@ -74,6 +74,7 @@ def spline(df, k):
     # Assign the DataFrame to an R variable
     robjects.globalenv['input'] = r_df
     robjects.globalenv['df'] = k
+    robjects.globalenv['remove_mean_sd_outliers'] = bool(remove_mean_sd_outliers)
 
 
     r_script = """
@@ -85,7 +86,10 @@ def spline(df, k):
     data = input
     data$group = as.factor(data$group)
 
-    rm_index = which(data$gene >= mean(data$gene) + 4*sd(data$gene))
+    rm_index = integer(0)
+    if (remove_mean_sd_outliers) {
+        rm_index = which(data$gene >= mean(data$gene) + 4*sd(data$gene))
+    }
     
     if (length(rm_index)!= 0) {
         data = data[-rm_index,] # removing cells with over 4 sd away from mean 
@@ -186,7 +190,7 @@ def spline(df, k):
         
     return test_statistics, predictions, interaction
 
-def spline_multi_rep(df, k):
+def spline_multi_rep(df, k, remove_mean_sd_outliers=True):
     """
     Fitting a spline model to the data and calculating the likelihood ratio test statistic
     
@@ -204,6 +208,7 @@ def spline_multi_rep(df, k):
     # Assign the DataFrame to an R variable
     robjects.globalenv['input'] = r_df
     robjects.globalenv['df'] = k
+    robjects.globalenv['remove_mean_sd_outliers'] = bool(remove_mean_sd_outliers)
 
     r_script = """
     suppressPackageStartupMessages(library(splines))
@@ -216,7 +221,7 @@ def spline_multi_rep(df, k):
     data$group = as.factor(data$group)
     
     val1 = quantile(data$gene,0.99)
-    val2 = mean(data$gene) + 4*sd(data$gene)
+    val2 = if (remove_mean_sd_outliers) mean(data$gene) + 4*sd(data$gene) else Inf
     val = min(val1, val2)
     
     rm_index = which(data$gene >= val)
@@ -299,7 +304,7 @@ def spline_multi_rep(df, k):
         
     return test_statistics, predictions, interaction
 
-def spline_multi_rep_ct(df, k):
+def spline_multi_rep_ct(df, k, remove_mean_sd_outliers=True):
     """
     Fitting a spline model to the data and calculating the likelihood ratio test statistic
     
@@ -317,6 +322,7 @@ def spline_multi_rep_ct(df, k):
     # Assign the DataFrame to an R variable
     robjects.globalenv['input'] = r_df
     robjects.globalenv['df'] = k
+    robjects.globalenv['remove_mean_sd_outliers'] = bool(remove_mean_sd_outliers)
 
     r_script = """
     suppressPackageStartupMessages(library(splines))
@@ -330,7 +336,7 @@ def spline_multi_rep_ct(df, k):
     data$cell_type = as.factor(data$cell_type)
     
     val1 = quantile(data$gene,0.99)
-    val2 = mean(data$gene) + 4*sd(data$gene)
+    val2 = if (remove_mean_sd_outliers) mean(data$gene) + 4*sd(data$gene) else Inf
     val = min(val1, val2)
     
     rm_index = which(data$gene >= val)
@@ -415,11 +421,12 @@ def spline_multi_rep_ct(df, k):
     return test_statistics, predictions, interaction
 
 class calculate_test_statistic_multi_rep:
-    def __init__(self, adata_list, group_id, k = 300, cell_type = None):
+    def __init__(self, adata_list, group_id, k = 300, cell_type = None, remove_mean_sd_outliers=True):
         self.adata_list = adata_list
         self.k = k
         self.group_id = group_id
         self.cell_type = cell_type
+        self.remove_mean_sd_outliers = remove_mean_sd_outliers
     
     def __call__(self, d, g):
         """
@@ -445,7 +452,7 @@ class calculate_test_statistic_multi_rep:
             df = pd.DataFrame({'emb': emb, 'exp': exp, 'group_id': g_id, 'rep': rep, 'cell_type':ct})
             
             try:    
-                test_statistic = spline_multi_rep_ct(df, self.k)
+                test_statistic = spline_multi_rep_ct(df, self.k, self.remove_mean_sd_outliers)
                 return test_statistic
             except Exception as e:
                 warnings.warn(f"DSE fit failed at dim={d}, gene={g}: {e}", RuntimeWarning)
@@ -455,7 +462,7 @@ class calculate_test_statistic_multi_rep:
             df = pd.DataFrame({'emb': emb, 'exp': exp, 'group_id': g_id, 'rep': rep})
             
             try:    
-                test_statistic = spline_multi_rep(df, self.k)
+                test_statistic = spline_multi_rep(df, self.k, self.remove_mean_sd_outliers)
                 return test_statistic
             except Exception as e:
                 warnings.warn(f"DSE fit failed at dim={d}, gene={g}: {e}", RuntimeWarning)
@@ -463,10 +470,11 @@ class calculate_test_statistic_multi_rep:
 
 
 class calculate_test_statistic:
-    def __init__(self, adata_1, adata_2, k = 300):
+    def __init__(self, adata_1, adata_2, k = 300, remove_mean_sd_outliers=True):
         self.adata_1 = adata_1
         self.adata_2 = adata_2
         self.k = k
+        self.remove_mean_sd_outliers = remove_mean_sd_outliers
     
     def __call__(self, d, g):
         """
@@ -487,7 +495,7 @@ class calculate_test_statistic:
         df = pd.DataFrame({'emb': emb, 'exp': exp, 'data_id': data_id})
         # Calculate the test statistic
         try:    
-            test_statistic = spline(df, self.k)
+            test_statistic = spline(df, self.k, self.remove_mean_sd_outliers)
             return test_statistic
         except Exception as e:
             warnings.warn(f"DSE fit failed at dim={d}, gene={g}: {e}", RuntimeWarning)
@@ -519,24 +527,14 @@ def empirical_null(df, quant_val = 0.75):
     n = ncol(df)
     quant_val = quant_val
 
-    fdr = matrix(NA, nrow = nrow(df), ncol = ncol(df))
+    fdr = matrix(1, nrow = nrow(df), ncol = ncol(df))
     for (i in 1:nrow(df)){
         # Extract the test statistics of embedding dimension i
         T <- as.numeric(df[i,])
-        rm_index <- which(T == -1)
-        T <- T[!T %in% T[rm_index]]
-        T <- T[is.finite(T)]
-
-        generate_vector <- function(values, indices) {
-            length_result <- length(values) + length(indices)
-            result <- rep(0, length_result)
-            value_positions <- setdiff(seq_along(result), indices)
-            result[value_positions] <- values
-            return(result)
-        }
+        valid_index <- which(is.finite(T) & T >= 0)
+        T <- T[valid_index]
 
         if (length(T) < 2 || var(T) == 0) {
-            fdr[i,] = generate_vector(rep(1, length(T)), rm_index)
             next
         }
         
@@ -547,7 +545,6 @@ def empirical_null(df, quant_val = 0.75):
         A0 = T[T < q]
         A0 = A0[is.finite(A0) & A0 > 0]
         if (length(A0) < 2 || var(A0) == 0) {
-            fdr[i,] = generate_vector(rep(1, length(T)), rm_index)
             next
         }
         
@@ -557,7 +554,6 @@ def empirical_null(df, quant_val = 0.75):
             error = function(e) NULL
         )
         if (is.null(fit_a0)) {
-            fdr[i,] = generate_vector(rep(1, length(T)), rm_index)
             next
         }
         
@@ -574,7 +570,8 @@ def empirical_null(df, quant_val = 0.75):
         denom = 1 - ecdf(T)(T)
         fdr_new = p0 * num / (denom + 1e-5)
         
-        fdr[i,] = generate_vector(fdr_new, rm_index)
+        fdr_new[!is.finite(fdr_new)] = 1
+        fdr[i,valid_index] = pmin(1, pmax(0, fdr_new))
     } 
     """
 
@@ -589,18 +586,30 @@ def empirical_null(df, quant_val = 0.75):
 
 
 def SpaceExpress_DSE(emb, adata_list, cell_type = None, k = 300, n_jobs=-1, multi = False, 
-                     group_id = None, quant_val = 0.75):
+                     group_id = None, quant_val = 0.75, remove_mean_sd_outliers=None):
     """
     Perform the SpaceExpress differential spatial expression analysis
     
     Inputs:
     adata_list (list): A list of anndata objects containing the spatial expression data
     n_jobs (int): The number of parallel jobs to run
+    remove_mean_sd_outliers (bool or None): None skips repeated mean+4SD
+        removal when every input is marked by select_hvg_after_outlier.
+        Legacy unmarked inputs retain removal. Mixed histories require an
+        explicit choice. Multi-replicate fits retain their separate 99% filter.
     
     Returns:
     df_fdr (pd.DataFrame): A pandas DataFrame containing the false discovery rates
     """
     _warn_if_k_is_large(adata_list, k, multi=multi, cell_type=cell_type, group_id=group_id)
+    processed = [bool(a.uns.get('spaceexpress_preprocessing', {}).get(
+        'mean_sd_outliers_removed', False)) for a in adata_list]
+    if remove_mean_sd_outliers is None:
+        if any(processed) and not all(processed):
+            raise ValueError('Mixed preprocessing histories; specify remove_mean_sd_outliers explicitly.')
+        remove_mean_sd_outliers = not all(processed)
+    if not isinstance(remove_mean_sd_outliers, (bool, np.bool_)):
+        raise TypeError('remove_mean_sd_outliers must be bool or None.')
 
     for i in range(len(adata_list)):
         adata_list[i].obsm['SpaceExpress'] = emb[i]
@@ -618,9 +627,11 @@ def SpaceExpress_DSE(emb, adata_list, cell_type = None, k = 300, n_jobs=-1, mult
         assert group_id != None, "There is no group_id"
         if len(group_id) != len(adata_list):
             raise ValueError("group_id length must match adata_list length.")
-        cal_statistic = calculate_test_statistic_multi_rep(adata_list, cell_type = cell_type, k = k, group_id = group_id)
+        cal_statistic = calculate_test_statistic_multi_rep(adata_list, cell_type = cell_type, k = k, group_id = group_id,
+                                                        remove_mean_sd_outliers=remove_mean_sd_outliers)
     else:    
-        cal_statistic = calculate_test_statistic(adata_1, adata_2, k = k)
+        cal_statistic = calculate_test_statistic(adata_1, adata_2, k = k,
+                                               remove_mean_sd_outliers=remove_mean_sd_outliers)
 
     # Create a list of jobs
     jobs = [(d, g) for d in range(num_dim) for g in range(num_gene)]
@@ -657,6 +668,12 @@ def SpaceExpress_DSE(emb, adata_list, cell_type = None, k = 300, n_jobs=-1, mult
 
     for i in range(len(adata_list)):
         adata_list[i].varm['DSE-fdr'] = df_fdr.T
+        adata_list[i].varm['DSE-statistic'] = df_test_statistics.T
+        adata_list[i].varm['DSE-fit-failed'] = (~np.isfinite(df_test_statistics) | (df_test_statistics < 0)).T
+        adata_list[i].uns['spaceexpress_dse'] = {
+            'remove_mean_sd_outliers': bool(remove_mean_sd_outliers),
+            'k': int(k), 'quant_val': float(quant_val),
+        }
     
     for i in range(len(adata_list)):
         adata_list[i].obsm['DSE-pred'] = predictions_list[i]

@@ -4,7 +4,20 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "spaceexpress"  # This is required
-version = "0.1.4"
+version = "0.1.5"
 description = "A Python package for spatial transcriptomics"
+keywords = ["spaceexpress", "Python"]
 authors = [{name = "Yeojin Kim", email = "ykim3030@gatech.edu"}]
-dependencies = []  # Add any dependencies here if necessary
+requires-python = ">=3.11"
+dependencies = [
+    "numpy", "scipy", "pandas>=2.2", "anndata>=0.12", "scanpy>=1.10",
+    "scikit-learn>=1.5", "matplotlib>=3.8", "torch>=2.1", "igraph>=0.11",
+    "tqdm", "joblib", "statsmodels", "rpy2>=3.5.11,<3.6",
+]
+
+[project.optional-dependencies]
+test = ["pytest", "build", "twine"]
+notebooks = ["nbformat", "nbclient", "ipykernel"]
+
+[project.urls]
+Repository = "https://github.com/YeojinKim220/SpaceExpress"
