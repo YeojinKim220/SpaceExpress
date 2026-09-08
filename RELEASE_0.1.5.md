@@ -30,7 +30,7 @@ python -m pip install 'spaceexpress[notebooks]==0.1.5'
 bash examples/submit_public_pair.sh /path/to/env/bin/python /path/to/config_v015.json /path/to/results_v015
 ```
 
-Slurm 기본 자원은 전처리 12 CPU/128 GB, 학습 H100 80 GB 1장·12 CPU/256 GB RAM, DSE 작업당 12 CPU/128 GB, 노트북 4 CPU/64 GB입니다. 각 작업의 시간 한도는 4시간입니다. `SE_ACCOUNT`, `SE_QOS`, `SE_CPU_PARTITION`, `SE_GPU_PARTITION`으로 클러스터 설정을 변경할 수 있습니다. 이는 요청량이며 측정된 필요량이 아닙니다.
+Slurm 기본 자원은 전처리 12 CPU/128 GB, 학습 H100 80 GB 1장·8 CPU/256 GB RAM, DSE 작업당 12 CPU/128 GB, 노트북 4 CPU/64 GB입니다. 각 작업의 시간 한도는 4시간입니다. `SE_ACCOUNT`, `SE_QOS`, `SE_CPU_PARTITION`, `SE_GPU_PARTITION`, `SE_GPU_CONSTRAINT`로 클러스터 설정을 변경할 수 있습니다. CPU 기본 파티션은 `cpu-medium`입니다. A100 사용 시 `SE_GPU_PARTITION=gpu-a100 SE_GPU_CONSTRAINT=A100-80GB`를 설정하십시오. 이는 요청량이며 측정된 필요량이 아닙니다.
 
 전처리, 전체 관측치 2-epoch GPU probe, 본 학습, k=30/50/100 DSE, 결과 노트북 순서로 실행합니다. 앞 단계 성공을 의존 조건으로 사용합니다. 본 학습은 config의 `epochs`, `patience`를 사용합니다. 실행 폴더 재사용은 거부하므로 새 실험에는 새 출력 경로를 지정하십시오.
 

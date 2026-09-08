@@ -6,7 +6,7 @@ import nbformat
 from nbclient import NotebookClient
 
 
-def build_and_execute(root):
+def build_and_execute(root, execute=True):
     root = Path(root).resolve()
     nb = nbformat.v4.new_notebook()
     code = nbformat.v4.new_code_cell
@@ -171,6 +171,8 @@ finish(fig, f'fdr_distribution_k{K}')
                                 'language': 'python', 'name': 'python3'}
     path = root / 'results.ipynb'
     nbformat.write(nb, path)
+    if not execute:
+        return path
     client = NotebookClient(nb, timeout=1800, kernel_name='python3',
                             resources={'metadata': {'path': str(root)}})
     client.km = client.create_kernel_manager()

@@ -30,7 +30,7 @@ python -m pip install 'spaceexpress[notebooks]==0.1.5'
 bash examples/submit_public_pair.sh /path/to/env/bin/python /path/to/config_v015.json /path/to/results_v015
 ```
 
-Default Slurm requests are 12 CPU/128 GB for preparation, 1 H100 80 GB GPU with 12 CPU/256 GB RAM for training, 12 CPU/128 GB per DSE job, and 4 CPU/64 GB for the notebook. Each job has a 4-hour limit. Set `SE_ACCOUNT`, `SE_QOS`, `SE_CPU_PARTITION`, and `SE_GPU_PARTITION` to configure your cluster. These are requests, not measured requirements.
+Default Slurm requests are 12 CPU/128 GB for preparation, 1 H100 80 GB GPU with 8 CPU/256 GB RAM for training, 12 CPU/128 GB per DSE job, and 4 CPU/64 GB for the notebook. Each job has a 4-hour limit. Set `SE_ACCOUNT`, `SE_QOS`, `SE_CPU_PARTITION`, `SE_GPU_PARTITION`, and `SE_GPU_CONSTRAINT` to configure your cluster. The default CPU partition is `cpu-medium`. For A100, set `SE_GPU_PARTITION=gpu-a100 SE_GPU_CONSTRAINT=A100-80GB`. These are requests, not measured requirements.
 
 Stages run in order: preparation, a 2-epoch GPU probe using all selected observations, main training, k=30/50/100 DSE, and a results notebook. Dependencies require successful prior stages. Main training uses `epochs` and `patience` from the config. Reusing a run directory is rejected; choose a new output path for a new experiment.
 
