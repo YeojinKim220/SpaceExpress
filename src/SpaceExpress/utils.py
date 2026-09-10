@@ -2,6 +2,7 @@ import numpy as np
 import igraph as ig
 from tqdm import tqdm
 from sklearn.neighbors import kneighbors_graph
+from scipy.sparse import issparse
 import pickle
 import matplotlib.pyplot as plt
 import os 
@@ -302,7 +303,11 @@ def plot_DSE (adata_list, df_fdr, file_list, gene_name, dimension, multi = False
     
     loc = [adata_list[i].obsm['spatial'] for i in range(num_data)]
     emb = [adata_list[i].obsm['SpaceExpress'][:, dim] for i in range(num_data)]
-    exp = [adata_list[i][:, gene_name].X for i in range(num_data)]
+    exp = []
+    for adata in adata_list:
+        values = adata[:, gene_name].X
+        # Densify only the selected gene, preserving observation order and sparse inputs.
+        exp.append(np.asarray(values.toarray() if issparse(values) else values).reshape(-1))
 
     gene_idx = np.where(adata_list[0].var_names == gene_name)[0][0]
     pred = [adata_list[i].obsm['DSE-pred'][:, gene_idx, dim] for i in range(num_data)]
