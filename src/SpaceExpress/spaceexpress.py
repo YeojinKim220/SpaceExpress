@@ -10,6 +10,7 @@ from tqdm import tqdm
 import copy
 import scipy
 import scanpy as sc
+from .reproducibility import set_seed
 
 def get_index (data):
     n_cells = data.shape[0]
@@ -72,7 +73,8 @@ def get_avg_neighbor(pos, count, k):
     return out
 
 def train_SpaceExpress(adata, shortest_file_path, device = None, epochs = 10000, lr = 0.01, hid_dim = 32, emb_dim = 8, 
-                       patience = 100, random_seed = 42, batch_size = 256, num_hvg = 1000, save_model = False):
+                       patience = 100, random_seed = 42, batch_size = 256, num_hvg = 1000, save_model = False,
+                       deterministic = False):
     """
     Train SpaceExpress model.
     
@@ -85,26 +87,19 @@ def train_SpaceExpress(adata, shortest_file_path, device = None, epochs = 10000,
     emb_dim (int): Embedding dimension
     patience (int): Patience for early stopping
     random_seed (int): Random seed
+    deterministic (bool): Require deterministic PyTorch kernels on this device/software stack
     batch_size (int): Batch size
     
     Returns:
     AnnData: Anndata object with SpaceExpress embedding
     """    
 
-    # Set random seed
-    torch.manual_seed(random_seed)
-    torch.cuda.manual_seed(random_seed)
-    torch.cuda.manual_seed_all(random_seed) 
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    np.random.seed(random_seed)
-    random.seed(random_seed)
+    set_seed(random_seed, deterministic=deterministic)
+    adata = adata.copy()
 
     # Set device
-    if device == 'mps':
-        device = torch.device("mps")
-    else:
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = torch.device(device if device is not None else
+                          ("cuda:0" if torch.cuda.is_available() else "cpu"))
     
     # Preprocessing
     percentile_95 = [np.percentile(adata.X[:,i], 95) for i in range(adata.shape[1])] 
@@ -171,7 +166,8 @@ def train_SpaceExpress(adata, shortest_file_path, device = None, epochs = 10000,
     return emb
 
 def train_SpaceExpress_multi(adata_list_input, shortest_file_path_list, device = None, epochs = 10000, lr = 0.01, hid_dim = 32, 
-                             emb_dim = 4, patience = 100, random_seed = 42, batch_size = 256, num_hvg = 1000, save_model = False):
+                             emb_dim = 4, patience = 100, random_seed = 42, batch_size = 256, num_hvg = 1000, save_model = False,
+                             deterministic = False):
     """
     Train SpaceExpress model.
     
@@ -184,28 +180,20 @@ def train_SpaceExpress_multi(adata_list_input, shortest_file_path_list, device =
     emb_dim (int): Embedding dimension
     patience (int): Patience for early stopping
     random_seed (int): Random seed
+    deterministic (bool): Require deterministic PyTorch kernels on this device/software stack
     batch_size (int): Batch size
     
     Returns:
     adata_list (list): List of AnnData objects with SpaceExpress embeddings
     """    
     
-    # Set random seed
-    torch.manual_seed(random_seed)
-    torch.cuda.manual_seed(random_seed)
-    torch.cuda.manual_seed_all(random_seed) 
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    np.random.seed(random_seed)
-    random.seed(random_seed)
+    set_seed(random_seed, deterministic=deterministic)
     
     adata_list = [i.copy() for i in adata_list_input]
     
     # Set device
-    if device == 'mps':
-        device = torch.device("mps")
-    else:
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = torch.device(device if device is not None else
+                          ("cuda:0" if torch.cuda.is_available() else "cpu"))
     
     # Preprocessing
     for i, adata in enumerate(adata_list):
@@ -224,8 +212,9 @@ def train_SpaceExpress_multi(adata_list_input, shortest_file_path_list, device =
         sc.pp.scale(adata)
         adata_list[i] = adata
     
-    intersecting_genes = set.intersection(*(set(adata.var_names) for adata in adata_list))
-    adata_list = [adata[:, list(intersecting_genes)] for adata in adata_list]
+    # Hash-dependent set iteration changes which weight is assigned to each gene.
+    intersecting_genes = sorted(set.intersection(*(set(adata.var_names) for adata in adata_list)))
+    adata_list = [adata[:, intersecting_genes] for adata in adata_list]
     print(f'Size of the input data: {[adata_list[i].shape for i in range(len(adata_list))]}')
     
     # Get data
