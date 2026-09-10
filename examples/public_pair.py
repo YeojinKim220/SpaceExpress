@@ -155,7 +155,11 @@ def prepare(config, root, status):
     for a in pair:
         sc.pp.normalize_total(a, target_sum=1e4)
         sc.pp.log1p(a)
-    pair, hvg, diagnostics = se.select_hvg_after_outlier(pair, n_top_genes=config['n_hvg'], z_threshold=4)
+    pair = se.preprocessing(pair, n_top_genes=config.get('n_hvg', 1000))
+    hvg = pair[0].var_names.tolist()
+    diagnostics = dict(pair[0].uns['spaceexpress_preprocessing'])
+    for key in ('selected_hvg_per_sample', 'removed_expression_entries'):
+        diagnostics[key] = diagnostics[key].tolist()
     graph_k, graph_scan = graph_policy(pair)
     clipping = []
     for i, a in enumerate(pair):
@@ -229,8 +233,6 @@ def dse(config, root, status, k):
         raise ValueError('Invalid FDR range')
     if not np.all(values[failed] == 1):
         raise ValueError('Failed fits did not receive FDR=1')
-    if any(a.uns['spaceexpress_dse']['remove_mean_sd_outliers'] for a in fitted):
-        raise ValueError('Duplicate mean+4SD removal was unexpectedly enabled')
     if not all(np.isfinite(a.obsm[key]).all() for a in fitted for key in ['DSE-pred', 'DSE-inter']):
         raise ValueError('Nonfinite predictions')
     if failed.all():

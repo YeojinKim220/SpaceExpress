@@ -72,7 +72,7 @@ def get_avg_neighbor(pos, count, k):
     out = np.concatenate((count_dense, neighbor_dense), axis=1)
     return out
 
-def train_SpaceExpress(adata, shortest_file_path, device = None, epochs = 10000, lr = 0.01, hid_dim = 32, emb_dim = 8, 
+def train_SpaceExpress(adata, shortest_file_path, device = None, epochs = 10000, lr = 0.01, hid_dim = 32, emb_dim = 4,
                        patience = 100, random_seed = 42, batch_size = 256, num_hvg = 1000, save_model = False,
                        deterministic = False):
     """
@@ -84,7 +84,7 @@ def train_SpaceExpress(adata, shortest_file_path, device = None, epochs = 10000,
     device (str): Device to use
     lr (float): Learning rate
     hid_dim (int): Hidden dimension
-    emb_dim (int): Embedding dimension
+    emb_dim (int): Embedding dimension (default: 4)
     patience (int): Patience for early stopping
     random_seed (int): Random seed
     deterministic (bool): Require deterministic PyTorch kernels on this device/software stack
@@ -101,12 +101,16 @@ def train_SpaceExpress(adata, shortest_file_path, device = None, epochs = 10000,
     device = torch.device(device if device is not None else
                           ("cuda:0" if torch.cuda.is_available() else "cpu"))
     
+    # Prepared union genes must not be selected again.
+    prepared = adata.uns.get('spaceexpress_preprocessing', {}).get('hvg_selection') == 'per_sample_union'
+    if scipy.sparse.issparse(adata.X):
+        adata.X = adata.X.toarray()
     # Preprocessing
     percentile_95 = [np.percentile(adata.X[:,i], 95) for i in range(adata.shape[1])] 
     adata.X = np.array([np.clip(adata.X[:,i], a_min=None, a_max=percentile_95[i]) for i in range(adata.shape[1])]).T 
     
     is_count_data = np.all(np.equal(np.mod(adata.X, 1), 0))
-    if adata.shape[1] > num_hvg:
+    if not prepared and adata.shape[1] > num_hvg:
         if is_count_data == True:
             sc.pp.highly_variable_genes(adata, n_top_genes=num_hvg, flavor='seurat_v3', subset = True) 
         else:
@@ -170,6 +174,11 @@ def train_SpaceExpress_multi(adata_list_input, shortest_file_path_list, device =
                              deterministic = False):
     """
     Train SpaceExpress model.
+
+    Inputs from se.preprocessing() retain the full HVG union: num_hvg and
+    internal HVG selection apply only to legacy, unprepared inputs. Prepared
+    samples must all carry the union marker and have the same gene set.
+    Per-sample 95th-percentile clipping and scaling still run on copies.
     
     Parameters:
     adata_list (list): List of AnnData objects
@@ -189,6 +198,18 @@ def train_SpaceExpress_multi(adata_list_input, shortest_file_path_list, device =
     
     set_seed(random_seed, deterministic=deterministic)
     
+    prepared_flags = [
+        a.uns.get('spaceexpress_preprocessing', {}).get('hvg_selection') == 'per_sample_union'
+        for a in adata_list_input
+    ]
+    prepared = bool(prepared_flags) and all(prepared_flags)
+    if any(prepared_flags):
+        if not prepared:
+            raise ValueError('Do not mix prepared union inputs with unprepared samples.')
+        genes = set(adata_list_input[0].var_names)
+        if not genes or any(not a.var_names.is_unique or set(a.var_names) != genes
+                            for a in adata_list_input):
+            raise ValueError('Prepared samples must have the same unique union genes.')
     adata_list = [i.copy() for i in adata_list_input]
     
     # Set device
@@ -198,13 +219,13 @@ def train_SpaceExpress_multi(adata_list_input, shortest_file_path_list, device =
     # Preprocessing
     for i, adata in enumerate(adata_list):
         # Check if adata.X is sparse and convert if necessary
-        if isinstance(adata.X, (scipy.sparse.csr_matrix, scipy.sparse.csc_matrix)):
+        if scipy.sparse.issparse(adata.X):
             adata.X = adata.X.toarray()    
 
         percentile_95 = [np.percentile(adata.X[:,i], 95) for i in range(adata.shape[1])] 
         adata.X = np.array([np.clip(adata.X[:,i], a_min=None, a_max=percentile_95[i]) for i in range(adata.shape[1])]).T 
         is_count_data = np.all(np.equal(np.mod(adata.X, 1), 0))
-        if adata.shape[1] > num_hvg:
+        if not prepared and adata.shape[1] > num_hvg:
             if is_count_data == True:
                 sc.pp.highly_variable_genes(adata, n_top_genes=num_hvg, flavor='seurat_v3', subset = True) 
             else:
@@ -212,6 +233,8 @@ def train_SpaceExpress_multi(adata_list_input, shortest_file_path_list, device =
         sc.pp.scale(adata)
         adata_list[i] = adata
     
+    # Prepared inputs already share the full union; this only aligns order.
+    # Legacy inputs retain their existing intersection behavior.
     # Hash-dependent set iteration changes which weight is assigned to each gene.
     intersecting_genes = sorted(set.intersection(*(set(adata.var_names) for adata in adata_list)))
     adata_list = [adata[:, intersecting_genes] for adata in adata_list]

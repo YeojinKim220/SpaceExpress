@@ -6,10 +6,42 @@ Korean version: [RELEASE_0.1.5.md](RELEASE_0.1.5.md)
 
 - Failed gene-embedding-dimension fits (negative or nonfinite statistics) receive FDR=1. Dimensions without a valid empirical-null fit also return FDR=1.
 - Final FDR values are bounded to [0, 1]. The existing empirical-null estimator is not replaced with another adjustment method.
-- `select_hvg_after_outlier` operates on normalized, log-transformed common genes, setting values at or above the pooled mean + 4 sample standard deviations to 0 before batch-aware HVG selection. It modifies copies, not input objects.
-- Initial preprocessing history is stored in `.uns['spaceexpress_preprocessing']`. DSE skips repeated mean+4SD removal when every input has this history. Unmarked legacy inputs retain the previous behavior; mixed histories require an explicit setting.
-- `SpaceExpress_DSE(..., remove_mean_sd_outliers=False)` also explicitly disables subsequent mean+4SD removal. Existing training-time 95% clipping is unchanged. The separate 99% filter in multi-replicate DSE is also retained.
+- `se.preprocessing(adata_list)` selects common genes, sets expression at or above the pooled mean + 4 sample standard deviations to 0, selects 1000 HVGs per sample, and takes their union. Users normalize and log-transform outside the function. It returns copies of the inputs.
+- Preprocessing history, per-sample HVG counts, and union size are stored in `.uns['spaceexpress_preprocessing']`. Training does not reselect HVGs for these union inputs.
+- The DSE `remove_mean_sd_outliers` argument and mean+4SD removal have been deleted. DSE does not repeat this step regardless of preprocessing history. Training-time 95% clipping and the multi-replicate DSE 99% filter remain.
 - Returned AnnData `.varm` includes `DSE-statistic` and `DSE-fit-failed`, so failures can be inspected without inferring them from 0 predictions.
+
+## Shared Preprocessing API and Duplication Review
+
+These API changes are unreleased changes in the current working tree. The PyPI 0.1.5 installation command below alone does not install the new API.
+
+```python
+for adata in adata_list:
+    sc.pp.normalize_total(adata, target_sum=1e4)
+    sc.pp.log1p(adata)
+
+adata_list = se.preprocessing(adata_list)
+emb = se.train_SpaceExpress_multi(adata_list, shortest_file_path_list)
+fdr, adata_list = se.SpaceExpress_DSE(emb, adata_list)
+```
+
+Normalization can be adapted to the data; the default `flavor="seurat"` expects log-transformed, nonnegative expression. You can change `n_top_genes=1000`, `z_threshold=4.0`, and `flavor="seurat"`. When there are at most 1000 common genes, all are retained. Otherwise, per-sample Scanpy HVG results are combined. Cutoff ties follow Scanpy selection behavior and can make the per-sample count exceed the requested count. Union size is not fixed.
+
+The return value is one AnnData list. All samples share the same sorted gene order, and `.X` contains cleaned CSR matrices. Observations are not deleted; other layers are only subsetted by gene, allowing raw counts to be preserved separately. `.var['highly_variable']` records selection in that sample. A gene marked False in one sample remains if another sample marks it True.
+
+| Stage | Current processing | Duplication review |
+| --- | --- | --- |
+| Before the call | User-defined normalization and log transformation | Not performed inside the new function |
+| `preprocessing` | Common genes, pooled mean+4SD zeroing, per-sample HVGs and union | Call once before training and DSE |
+| `train_SpaceExpress_multi` | Per-sample 95% clipping, mean centering and SD scaling, gene-order alignment | Skips HVG reselection for new prepared inputs; preserves union |
+| Training without the new preprocessing | Existing per-sample HVG selection followed by intersection | Legacy path retained; results can differ from the new path |
+| Single-sample `train_SpaceExpress` | 95% clipping and scaling | Skips HVG reselection for new prepared inputs |
+| Two-sample DSE | Per-group SD scaling without centering | Mean+4SD removal deleted |
+| Multi-replicate DSE | Excludes observations at or above the pooled 99% quantile from fitting, per-replicate SD scaling | Mean+4SD removal deleted; 99% filter retained for subsequent review |
+
+Training clips and scales copies. Pass the same prepared list, with its pre-training `.X` preserved, to DSE. Mixing new union inputs with unprepared inputs raises a training error. The training `num_hvg` argument does not trigger reselection for new union inputs.
+
+The old `select_hvg_after_outlier` remains as a compatibility wrapper returning `(samples, genes, diagnostics)`. It now also uses the per-sample union, so results differ from the former fixed-size selection. The wrapper retains its old default of 200; the new API defaults to 1000 per sample. Remove the deleted `remove_mean_sd_outliers` argument from calling code as well.
 
 ## Installation
 
@@ -24,7 +56,7 @@ python -m pip install 'spaceexpress[notebooks]==0.1.5'
 
 ## Running Data
 
-`examples/public_pair.py` resolves paths relative to its config and does not overwrite originals. It checks raw counts for at least 3 detected genes and finite spatial coordinates, then applies spatial-bin proportional sampling if needed. Common genes detected in at least 3 observations in each sample are normalized to 10,000, log1p-transformed, and processed as above to select 200 HVGs. Selected raw data and QC metrics are also saved.
+`examples/public_pair.py` resolves paths relative to its config and does not overwrite originals. It checks raw counts for at least 3 detected genes and finite spatial coordinates, then applies spatial-bin proportional sampling if needed. Common genes detected in at least 3 observations in each sample are normalized to 10,000, log1p-transformed, and processed by the new per-sample HVG union. The config's `n_hvg` is the per-sample selection count and defaults to 1000 when omitted. Selected raw data and QC metrics are also saved.
 
 ```bash
 bash examples/submit_public_pair.sh /path/to/env/bin/python /path/to/config_v015.json /path/to/results_v015

@@ -40,8 +40,16 @@ def test_prepare_slide_counts_provenance_and_no_input_changes(tmp_path):
         raw = ad.read_h5ad(tmp_path / f'raw_selected_{i}.h5ad')
         prepared = ad.read_h5ad(tmp_path / f'prepared_condition{i}.h5ad')
         assert raw.shape == (80, 60)
-        assert prepared.shape == (80, 20)
+        assert prepared.n_obs == 80
+        assert 20 <= prepared.n_vars <= 60
+        assert prepared.uns['spaceexpress_preprocessing']['hvg_selection'] == 'per_sample_union'
+        assert prepared.uns['spaceexpress_preprocessing']['n_top_genes_per_sample'] == 20
         assert list(raw.obs_names) == list(prepared.obs_names)
         assert prepared.uns['spaceexpress_preprocessing']['mean_sd_outliers_removed']
         assert 'b0' not in raw.obs_names and 'b1' not in raw.obs_names
         np.testing.assert_array_equal(raw[:, prepared.var_names].X.toarray(), prepared.layers['counts'].toarray())
+
+    first = ad.read_h5ad(tmp_path / 'prepared_condition0.h5ad')
+    second = ad.read_h5ad(tmp_path / 'prepared_condition1.h5ad')
+    assert first.var_names.equals(second.var_names)
+    np.testing.assert_array_equal(first.var['highly_variable'] | second.var['highly_variable'], True)
