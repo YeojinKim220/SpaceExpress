@@ -1,4 +1,4 @@
-<img width="468" height="75" alt="image" src="https://github.com/user-attachments/assets/b3896ec5-393d-4194-9346-6d9634528652" /># SpaceExpress
+# SpaceExpress
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
 
