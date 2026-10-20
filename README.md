@@ -1,4 +1,4 @@
-# SpaceExpress
+<img width="468" height="75" alt="image" src="https://github.com/user-attachments/assets/b3896ec5-393d-4194-9346-6d9634528652" /># SpaceExpress
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
 
@@ -60,6 +60,8 @@ This will create and activate a Conda environment with all necessary dependencie
 
 ## Guidelines for choosing hyperparameters
 We empirically observed that this hyperparameter setting is effective for datasets with sizes ranging from approximately 3k to 10k cells. For datasets with substantially fewer cells, we recommend using smaller values of the "k" parameter in the SpaceExpress_DSE function.
+
+We recommend starting with d = 4 and considering higher values for tissues with more complex organization, while checking whether the additional dimensions capture interpretable spatial patterns and whether the DSE results remain stable.
 
 ## Citation
 If you use SpaceExpress in your research, please cite:
